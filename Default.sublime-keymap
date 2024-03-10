@@ -1,4 +1,4 @@
 [
-    { "keys": ["ctrl+tab"], "command": "ollama_fill" },
+    { "keys": ["ctrl+shift+/"], "command": "ollama_fill" },
     { "keys": ["ctrl+enter"], "command": "ollama_insert" }
 ]

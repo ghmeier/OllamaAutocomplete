@@ -1,0 +1,5 @@
+{
+    "url": "http://localhost:11434/api/generate",
+    "model": "deepseek-code-autocomplete:latest",
+    "family": "deepseek"
+}

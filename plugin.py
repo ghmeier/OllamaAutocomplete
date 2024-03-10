@@ -9,6 +9,7 @@ import sublime_plugin
 _view_to_phantom_set = {}
 completion = None
 lock = Lock()
+settings = sublime.load_settings("OllamaAutocomplete.sublime-settings")
 
 
 def get_phantom_set(view) -> sublime.PhantomSet:
@@ -37,7 +38,18 @@ TEMPLATE = """
         </style>
         {body}
     </body>
-    """
+"""
+
+FAMILY = {
+    "deepseek": {
+        "prompt": "<｜fim▁begin｜>{prefix}<｜fim▁hole｜>{suffix}<｜fim▁end｜>",
+        "stop": ["<｜fim▁begin｜>", "<｜fim▁hole｜>", "<｜fim▁end｜>"],
+    },
+    "codellama": {
+        "prompt": "<PRE> {prefix} <SUF>{suffix} <MID>",
+        "stop": ["<PRE>", "<SUF>", "<MID>", "<EOT>"],
+    },
+}
 
 
 def is_active_view(obj):
@@ -49,6 +61,8 @@ class Completion:
         self.text = text.strip()
         self.view = view
         self.lines = self.text.splitlines()
+        self.settings = view.settings()
+
         if not use_multiline:
             self.lines = self.lines[:1]
         self.active = True
@@ -104,22 +118,23 @@ def make_async_request(view, use_multiline):
     suffix = view.substr(sublime.Region(cursor.b, view.size()))
 
     stop = STOP_WORDS[view.syntax().name]
-    prompt = f"<｜fim▁begin｜>{prefix}<｜fim▁hole｜>{suffix}<｜fim▁end｜>"
+
+    model_family = FAMILY[settings.get("family", "codellama")]
+    prompt = model_family["prompt"].format(prefix=prefix, suffix=suffix)
+    print(prompt)
     req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
+        settings.get("url"),
         data=json.dumps(
             {
-                "model": "deepseek-code-autocomplete:latest",
+                "model": settings.get("model"),
                 "prompt": prompt,
                 "options": {
                     "stop": [
-                        "<｜fim▁begin｜>",
-                        "<｜fim▁hole｜>",
-                        "<｜fim▁end｜>",
+                        *model_family["stop"],
                         "//",
                         *stop,
                     ],
-                    "temperature": 1,
+                    "temperature": 0.9,
                 },
                 "raw": True,
                 "stream": False,
@@ -154,7 +169,6 @@ class OllamaInsertCommand(sublime_plugin.TextCommand):
 
 class OllamaFillCommand(sublime_plugin.TextCommand):
     def run(self, edit):
-        print("FILLING")
         cursor = self.view.sel()[0]
         scope = self.view.scope_name(cursor.end()).strip().split(" ")
 
