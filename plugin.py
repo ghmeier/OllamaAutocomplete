@@ -28,6 +28,12 @@ STOP_WORDS = {
     "Python": ["def", "class"],
 }
 
+FILE_COMMENT = {
+    "TSX": "// Path: {file_name}\n",
+    "TypeScript": "// Path: {file_name}\n",
+    "Python": "# Path: {file_name}\n",
+}
+
 TEMPLATE = """
     <body>
         <style>
@@ -43,7 +49,14 @@ TEMPLATE = """
 FAMILY = {
     "deepseek": {
         "prompt": "<｜fim▁begin｜>{prefix}<｜fim▁hole｜>{suffix}<｜fim▁end｜>",
-        "stop": ["<｜fim▁begin｜>", "<｜fim▁hole｜>", "<｜fim▁end｜>"],
+        "options": {
+            "stop": ["<｜fim▁begin｜>", "<｜fim▁hole｜>", "<｜fim▁end｜>"],
+            "temperature": 0.6,
+            "top_k": 30,
+            "top_p": 0.2,
+            "num_predict": 30,
+            "repeat_penalty": 1.1,
+        },
     },
     "codellama": {
         "prompt": "<PRE> {prefix} <SUF>{suffix} <MID>",
@@ -62,7 +75,6 @@ class Completion:
         self.view = view
         self.lines = self.text.splitlines()
         self.settings = view.settings()
-
         if not use_multiline:
             self.lines = self.lines[:1]
         self.active = True
@@ -117,25 +129,27 @@ def make_async_request(view, use_multiline):
     prefix = view.substr(sublime.Region(a, cursor.b))
     suffix = view.substr(sublime.Region(cursor.b, view.size()))
 
-    stop = STOP_WORDS[view.syntax().name]
+    syntax = view.syntax().name
+    prefix = f"{FILE_COMMENT[syntax].format(file_name=view.file_name())}{prefix}"
 
     model_family = FAMILY[settings.get("family", "codellama")]
     prompt = model_family["prompt"].format(prefix=prefix, suffix=suffix)
-    print(prompt)
+
+    options = {**model_family["options"]}
+
+    if use_multiline:
+        options["num_predict"] = 256
+        options["stop"].append("\n\n")
+    else:
+        options["stop"].append("\n")
+
     req = urllib.request.Request(
         settings.get("url"),
         data=json.dumps(
             {
                 "model": settings.get("model"),
                 "prompt": prompt,
-                "options": {
-                    "stop": [
-                        *model_family["stop"],
-                        "//",
-                        *stop,
-                    ],
-                    "temperature": 0.9,
-                },
+                "options": options,
                 "raw": True,
                 "stream": False,
             }
